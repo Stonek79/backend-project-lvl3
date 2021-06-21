@@ -25,7 +25,6 @@ jobs:
       - name: npm install, build
         run: |
           make install
-          make build
         env:
           CI: true
 
