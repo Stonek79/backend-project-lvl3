@@ -1,8 +1,8 @@
 install:
-	npm install
+	npm ci
 
-pageloader:
-	node bin/index.js
+page-loader:
+	node bin/pageloader.js
 
 test:
 	npm test
