@@ -6,3 +6,4 @@
 [![Test Coverage](https://api.codeclimate.com/v1/badges/a99a88d28ad37a79dbf6/test_coverage)](https://codeclimate.com/github/Stonek79/backend-project-lvl3)
 [![WF](https://github.com/Stonek79/backend-project-lvl3/workflows/PageLoader/badge.svg)](https://github.com/Stonek79/backend-project-lvl3)
 ***
+[![First step isciinema](https://asciinema.org/a/vBCVPynW9ESEADMTJCV81FESd.svg)](https://asciinema.org/a/vBCVPynW9ESEADMTJCV81FESd)
