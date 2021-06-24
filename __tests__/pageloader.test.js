@@ -25,7 +25,6 @@ const getFilePath = (filename) => path.join(__dirname, '..', '__fixtures__', fil
 const getExpectedResult = (fileName) => (fs.readFile(getFilePath(fileName), 'utf-8'));
 
 const url = 'https://ru.hexlet.io/courses';
-const imgFilename = 'ru-hexlet-io-assets-professions-nodejs.png';
 let originalPageData;
 let expectedPageData;
 let expectedFileName;
