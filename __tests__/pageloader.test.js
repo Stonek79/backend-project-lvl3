@@ -2,93 +2,99 @@
 /**
  * @jest-environment node
  */
-
 import os from 'os';
-import path from 'path';
-import nock from 'nock';
-import axios from 'axios';
-import httpAdapter from 'axios/lib/adapters/http';
-import { promises as fs } from 'fs';
-import {
-  test, beforeEach, beforeAll, expect,
-} from '@jest/globals';
+import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
+import httpAdapter from 'axios/lib/adapters/http.js';
+import nock from 'nock';
+import { promises as fs } from 'fs';
+import axiosDebug from 'axios-debug-log';
 
 import grubHTML from '../src/index.js';
 
-axios.defaults.adapter = httpAdapter;
+axiosDebug({
+  request(debug, request) {
+    debug(`Request with ${request.headers['content-type']}`);
+  },
+  response(debug, response) {
+    debug(
+      `Response with ${response.headers['content-type']}`,
+      `from ${response.config.url}`,
+    );
+  },
+  error(debug, error) {
+    debug('Some axios error: ', error.message);
+  },
+});
+
 nock.disableNetConnect();
+axios.defaults.adapter = httpAdapter;
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const getFilePath = (filename) => path.join(__dirname, '..', '__fixtures__', filename);
-const getExpectedResult = (fileName) => (fs.readFile(getFilePath(fileName), 'utf-8'));
+const __dirname = dirname(__filename);
+const getFilePath = (fileName) => path.join(__dirname, '..', '__fixtures__', fileName);
+const getFileData = (fileName) => fs.readFile(getFilePath(fileName), 'utf8');
 
+const filesInfo = [
+  { name: 'originalPage.html', handledName: 'ru-hexlet-io-courses.html', path: '/courses' },
+  { name: 'testImgFile.png', handledName: 'ru-hexlet-io-assets-professions-nodejs.png', path: /png/ },
+  { name: 'testScriptFile.js', handledName: 'ru-hexlet-io-packs-js-runtime.js', path: /js/ },
+  { name: 'testCssFile.css', handledName: 'ru-hexlet-io-assets-application.css', path: /css/ },
+];
+const host = 'https://ru.hexlet.io';
 const url = 'https://ru.hexlet.io/courses';
-let originalPageData;
-let expectedPageData;
-let expectedFileName;
+const incorrectUrl = 'https://ru.hexlet.io/incorrect';
+const fakeUrlHost = nock(host).persist();
+let filesContent;
 let tempDir;
+let expectedHtml;
 
 beforeAll(async () => {
-  const { protocol } = new URL(url);
-
-  expectedFileName = url
-    .split(protocol)
-    .join()
-    .split(/[^\d\sA-Z]/gi)
-    .filter((el) => el !== '')
-    .join('-')
-    .concat('.html');
-
-  originalPageData = await getExpectedResult('originalPage.html');
-  expectedPageData = await getExpectedResult('loadedPage.html');
-});
-
-beforeEach(async () => {
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-loader-'));
+  expectedHtml = await getFileData('loadedPage.html');
+
+  const generatedFilesContent = filesInfo.map(async (file) => {
+    const data = await getFileData(file.name);
+    return { [file.name]: data };
+  });
+
+  filesContent = await Promise.all(generatedFilesContent);
+
+  filesInfo.forEach((file) => {
+    const currentFileContent = filesContent.find((content) => content[file.name]);
+    fakeUrlHost.get(file.path).reply(200, currentFileContent[file.name]);
+  });
 });
 
-test('fetchFileName', async () => {
-  nock('https://ru.hexlet.io')
-    .get('/courses')
-    .reply(200, originalPageData);
-  await grubHTML(url, tempDir);
-  const dirData = await fs.readdir(tempDir, { withFileTypes: true });
-  const [filename] = dirData.filter((dirent) => (dirent.isFile() ? dirent.name : null));
-  expect(filename.name).toEqual(expectedFileName);
+describe('Pageload success tests', () => {
+  test('FetchHtmlData', async () => {
+    await grubHTML(url, tempDir);
+    const [htmlFile] = await fs.readdir(tempDir);
+    const htmlData = await fs.readFile(path.join(tempDir, htmlFile), 'utf8');
+    expect(htmlData.trim()).toEqual(expectedHtml);
+  });
+
+  const filesName = filesInfo.map((res) => res.name);
+  test.each(filesName)('FetchFileData: %s', async (filename) => {
+    const [, filesDirectory] = await fs.readdir(tempDir);
+    const filesDirectoryPath = `${tempDir}/${filesDirectory}`;
+    const currentFile = filesInfo.find(({ name }) => name === filename);
+    const data = await fs.readFile(path.join(filesDirectoryPath, currentFile.handledName), 'utf8');
+    const currentContent = filesContent.find((c) => c[filename]);
+    expect(data).toEqual(currentContent[filename]);
+  });
 });
 
-test('fetchFilePath', async () => {
-  nock('https://ru.hexlet.io')
-    .get('/courses')
-    .reply(200, originalPageData);
-  const expectedFilePath = path.join(tempDir, expectedFileName);
-  await grubHTML(url, tempDir);
-  const dirData = await fs.readdir(tempDir, { withFileTypes: true });
-  const [filename] = dirData.filter((dirent) => (dirent.isFile() ? dirent.name : null));
-  const currentPath = path.join(tempDir, filename.name);
-  expect(currentPath).toEqual(expectedFilePath);
-});
+describe('Pageload fails tests', () => {
+  test('Fail with url error', async () => {
+    nock(host)
+      .get('/incorrect')
+      .reply(404);
+    await expect(grubHTML(incorrectUrl, tempDir)).rejects.toThrow(/404/);
+  });
 
-test('fetchPageData', async () => {
-  nock('https://ru.hexlet.io')
-    .get('/courses')
-    .reply(200, originalPageData);
-  await grubHTML(url, tempDir);
-  const dirData = await fs.readdir(tempDir, { withFileTypes: true });
-  const [filename] = dirData.filter((dirent) => (dirent.isFile() ? dirent.name : null));
-  const currentPath = path.join(tempDir, filename.name);
-  const fileData = await fs.readFile(currentPath, 'utf-8');
-  expect(fileData.trim()).toEqual(expectedPageData);
-});
-
-test('hasCreatedDirectory', async () => {
-  nock('https://ru.hexlet.io')
-    .get('/courses')
-    .reply(200, originalPageData);
-  await grubHTML(url, tempDir);
-  const dirData = await fs.readdir(tempDir, { withFileTypes: true });
-  const [dirname] = dirData.filter((dirent) => (dirent.isDirectory() ? dirent.name : null));
-  expect(dirname.name).toBeDefined();
+  test('Fail with output directory error', async () => {
+    await expect(grubHTML(url, '/fail/dir')).rejects.toThrow('ENOENT');
+  });
 });

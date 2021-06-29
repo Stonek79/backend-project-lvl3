@@ -1,10 +1,26 @@
-import axios from 'axios';
+import _ from 'lodash';
 import * as cheerio from 'cheerio';
+import axios from 'axios';
+import debug from 'debug';
 import path from 'path';
 import prettier from 'prettier';
 import { promises as fs } from 'fs';
+import Listr from 'listr';
+import axiosdebug from 'axios-debug-log';
 
-// const prettier = require('prettier');
+const logger = debug('page-loader');
+
+axiosdebug({
+  response(deb, response) {
+    debug(
+      `Response with ${response.headers['content-type']}`,
+      `from ${response.config.url}`,
+    );
+  },
+  error(deb, error) {
+    debug('Axios Error: ', error);
+  },
+});
 
 const createItemName = (url, nameEnd = '') => {
   const { protocol } = new URL(url);
@@ -17,76 +33,94 @@ const createItemName = (url, nameEnd = '') => {
     .concat(nameEnd);
 };
 
-const getImgPaths = (cheerioData) => {
-  const recievedImgElements = cheerioData('img');
+const getPageLinks = ($) => {
+  const pageTags = $('img, script, link');
   const links = [];
-  recievedImgElements.each((_, e) => {
-    links.push(cheerioData(e).attr('src'));
+  logger('Receiving page links');
+  pageTags.each((i, e) => {
+    links.push($(e).attr('src') || $(e).attr('href'));
   });
-  return links;
+  return _.compact(links);
 };
 
-const grubHTML = (url, dir) => axios(url)
-  .then((response) => {
-    const { data } = response;
-    const dirName = createItemName(url, '_files');
-    const dirPath = path.resolve(dir, dirName);
-    fs.mkdir(dirPath);
-    return { dirName, data };
-  })
-  .then((response) => {
-    const { dirName, data } = response;
-    const $ = cheerio.load(data);
-    const downloadedImgLinks = getImgPaths($);
-    const { origin } = new URL(url);
+const createLoadingResouceTask = (dirpath, link, handledLink, origin) => {
+  const fullLink = new URL(link, origin).href;
+  logger(`Downloading resource ${fullLink}`);
+  return {
+    title: `Loading resource: ${fullLink.toString()}`,
+    task: () => axios.get(fullLink, { responseType: 'stream' })
+      .then((res) => fs.writeFile(path.resolve(dirpath, handledLink), res.data))
+      .catch((err) => { throw err; }),
+  };
+};
 
-    const handledLinks = downloadedImgLinks.reduce((acc, link) => {
+const replaceHtmlAttr = (link, handledLink, attr, $) => {
+  $(`*[${attr}^="${link}"]`).attr(`${attr}`, (i, a) => a.replace(link, handledLink));
+  return $.html();
+};
+
+const handleLoadedLinks = ($, dirName, origin) => {
+  const loadedLinks = getPageLinks($);
+  return loadedLinks.reduce((acc, link) => {
+    const absoluteLink = new URL(link, origin);
+    if (absoluteLink.origin === origin) {
       const ext = path.extname(link);
-      const { hostname, pathname } = new URL(link, origin);
-      const parsedPathname = path.parse(pathname);
-      const newLink = path.format({
-        dir: hostname.concat('/', parsedPathname.dir),
-        name: parsedPathname.name,
-      });
-      const handledLink = newLink
-        .split(/[^\d\sA-Z]/gi)
-        .filter((el) => el !== '')
-        .join('-')
-        .concat(ext);
-      const absolutePathToImg = path.join(dirName, handledLink);
+      const extension = _.isEmpty(ext) ? '.html' : ext;
+      const { dir, name } = path.parse(absoluteLink.href);
+      const extCutLink = path.join(dir, name);
+      const handledLink = createItemName(extCutLink, extension);
+      const absolutePath = path.join(dirName, handledLink);
 
-      return { ...acc, [link]: absolutePathToImg };
-    }, {});
+      replaceHtmlAttr(link, absolutePath, 'src', $);
+      replaceHtmlAttr(link, absolutePath, 'href', $);
+      return { ...acc, [link]: absolutePath };
+    }
+    return acc;
+  }, {});
+};
 
-    const downloadedImages = downloadedImgLinks.map((link) => {
-      const fullImgLink = new URL(link, origin);
-      return axios({
-        method: 'get',
-        url: `${fullImgLink}`,
-        responseType: 'stream',
-      })
-        .then((res) => {
-          console.log(path.resolve(dir, handledLinks[link]));
-          fs.writeFile(path.resolve(dir, handledLinks[link]), res.data);
-        })
-        .catch((err) => ({ result: 'error', error: err }));
-    });
-    Promise.all(downloadedImages);
-    return { handledLinks, $ };
-  })
-  .then((response) => {
-    const { handledLinks, $ } = response;
-    Object.keys(handledLinks).forEach((key) => {
-      $(`img[src^="${key}"]`).attr('src', (_, a) => a.replace(key, handledLinks[key]));
-      return $.html();
-    });
-    const fileName = createItemName(url, '.html');
-    const filePath = path.resolve(dir, fileName);
-    const changedHtml = prettier.format($.html(), { printWidth: 300, parser: 'html' });
+const grubHTML = (url, dir) => {
+  const dirName = createItemName(url, '_files');
+  const dirPath = path.resolve(dir, dirName);
+  const fileName = createItemName(url, '.html');
+  const filePath = path.resolve(dir, fileName);
+  const { origin } = new URL(url);
 
-    fs.writeFile(filePath, changedHtml);
-    return filePath;
-  })
-  .then((resolve) => console.log(`Page was downloded to '${resolve}'`));
+  return axios(url)
+    .then((response) => {
+      logger(`Loading page: ${url}`);
+      const task = new Listr([{
+        title: `Сreating directory: ${dirName.toString()}`,
+        task: () => fs.mkdir(dirPath)
+          .catch((err) => { throw err; }),
+      }]);
+
+      return task.run(response)
+        .then((res) => res);
+    })
+    .then((response) => {
+      logger(`Creating new html page: ${fileName}`);
+      const $ = cheerio.load(response.data);
+      const handledLinks = handleLoadedLinks($, dirName, origin);
+      const changedHtml = prettier.format($.html(), { printWidth: 300, parser: 'html' });
+      const filesTasks = Object.entries(handledLinks)
+        .map(([link, handledLink]) => createLoadingResouceTask(dir, link, handledLink, origin));
+      const task = new Listr(filesTasks, { concurrent: true });
+
+      return task.run(changedHtml)
+        .then((res) => res);
+    })
+    .then((response) => {
+      logger(`Writing loaded html: ${fileName.toString()}`);
+      const task = new Listr([{
+        title: `Сreating htmlFile: ${fileName.toString()}`,
+        task: () => fs.writeFile(filePath, response)
+          .catch((err) => { throw err; }),
+      }]);
+
+      return task.run();
+    })
+    .then(() => filePath);
+};
 
 export default grubHTML;

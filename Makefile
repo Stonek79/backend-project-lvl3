@@ -1,7 +1,7 @@
 install:
 	npm ci
 
-page-loader:
+start:
 	node bin/pageloader.js
 
 test:

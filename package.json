@@ -1,7 +1,7 @@
 {
   "name": "@hexlet/code",
   "version": "1.0.0",
-  "description": "NodeJS pageloader",
+  "description": "Small Nodejs application for loading web pages to your PC (HTML Grubber)",
   "bin": {
     "page-loader": "bin/pageloader.js"
   },
@@ -31,8 +31,12 @@
   "dependencies": {
     "@jest/globals": "^27.0.3",
     "axios": "^0.21.1",
+    "axios-debug-log": "^0.8.2",
     "cheerio": "^1.0.0-rc.10",
     "commander": "^7.2.0",
+    "debug": "^4.3.1",
+    "listr": "^0.14.3",
+    "lodash": "^4.17.21",
     "prettier": "^2.3.1"
   }
 }
