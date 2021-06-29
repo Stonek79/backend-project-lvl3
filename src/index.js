@@ -79,7 +79,7 @@ const handleLoadedLinks = ($, dirName, origin) => {
   }, {});
 };
 
-const grubHTML = (url, dir) => {
+const grubHTML = (url, dir = process.cwd()) => {
   const dirName = createItemName(url, '_files');
   const dirPath = path.resolve(dir, dirName);
   const fileName = createItemName(url, '.html');
