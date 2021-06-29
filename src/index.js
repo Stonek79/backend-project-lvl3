@@ -48,8 +48,8 @@ const createLoadingResouceTask = (dirpath, link, handledLink, origin) => {
   logger(`Downloading resource ${fullLink}`);
   return {
     title: `Loading resource: ${fullLink.toString()}`,
-    task: () => axios.get(fullLink, { responseType: 'stream' })
-      .then((res) => fs.writeFile(path.resolve(dirpath, handledLink), res.data))
+    task: () => axios.get(fullLink, { responseType: 'arraybuffer' })
+      .then(({ data }) => fs.writeFile(path.resolve(dirpath, handledLink), data))
       .catch((err) => { throw err; }),
   };
 };
