@@ -3,7 +3,7 @@
 import program from 'commander';
 import { createRequire } from 'module';
 
-import htmlGrubber from '../src/index.js';
+import htmlLoader from '../src/index.js';
 
 const require = createRequire(import.meta.url);
 const { version, description } = require('../package.json');
@@ -24,10 +24,9 @@ program
   .action((url) => {
     const { output } = program.opts();
     // program.output почему-то не работет
-    htmlGrubber(url, output)
+    htmlLoader(url, output)
       .then((resolve) => {
         console.log(`\n Page was downloaded to '${resolve}'`);
-        process.exit();
       })
       .catch((error) => {
         console.error(errorMessages[error.code] ?? 'Opps, some unexpected error...');

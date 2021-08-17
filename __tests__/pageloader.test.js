@@ -8,7 +8,7 @@ import nock from 'nock';
 import { promises as fs } from 'fs';
 import axiosDebug from 'axios-debug-log';
 
-import grubHTML from '../src/index.js';
+import loadHTML from '../src/index.js';
 
 axiosDebug({
   request(debug, request) {
@@ -43,12 +43,16 @@ const host = 'https://ru.hexlet.io';
 const url = 'https://ru.hexlet.io/courses';
 const incorrectUrl = 'https://ru.hexlet.io/incorrect';
 const fakeUrlHost = nock(host).persist();
+const fakeFilePath = getFilePath('fakeFile.js');
 let filesContent;
 let tempDir;
+let deniedDir;
 let expectedHtml;
 
 beforeAll(async () => {
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-loader-'));
+  deniedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-loader-'));
+  fs.chmod(deniedDir, 0o400);
   expectedHtml = await getFileData('loadedPage.html');
 
   const generatedFilesContent = filesInfo.map(async (file) => {
@@ -66,32 +70,38 @@ beforeAll(async () => {
 
 describe('Pageload success tests', () => {
   test('FetchHtmlData', async () => {
-    await grubHTML(url, tempDir);
+    await loadHTML(url, tempDir);
     const [htmlFile] = await fs.readdir(tempDir);
     const htmlData = await fs.readFile(path.join(tempDir, htmlFile), 'utf8');
     expect(htmlData.trim()).toEqual(expectedHtml);
   });
 
-  const filesName = filesInfo.map((res) => res.name);
-  test.each(filesName)('FetchFileData: %s', async (filename) => {
+  test.each(filesInfo)('FetchFileData: $name', async ({ name }) => {
     const [, filesDirectory] = await fs.readdir(tempDir);
     const filesDirectoryPath = `${tempDir}/${filesDirectory}`;
-    const currentFile = filesInfo.find(({ name }) => name === filename);
-    const data = await fs.readFile(path.join(filesDirectoryPath, currentFile.handledName), 'utf8');
-    const currentContent = filesContent.find((c) => c[filename]);
-    expect(data).toEqual(currentContent[filename]);
+    const currentFile = filesInfo.find((file) => file.name === name);
+    const data = fs.readFile(path.join(filesDirectoryPath, currentFile.handledName), 'utf8');
+    await expect(data).resolves.not.toThrow();
   });
 });
 
 describe('Pageload fails tests', () => {
-  test('Fail with url error', async () => {
+  test.each([404, 500])('Fail with error code "%s"', async (err) => {
     nock(host)
       .get('/incorrect')
-      .reply(404);
-    await expect(grubHTML(incorrectUrl, tempDir)).rejects.toThrow(/404/);
+      .reply(err);
+    await expect(loadHTML(incorrectUrl, tempDir)).rejects.toThrow(`Request failed with status code ${err}`);
   });
 
   test('Fail with output directory error', async () => {
-    await expect(grubHTML(url, '/fail/dir')).rejects.toThrow('ENOENT');
+    await expect(loadHTML(url, '/fail/dir')).rejects.toThrow('ENOENT');
+  });
+
+  test('Fail with output is NOT a directory error', async () => {
+    await expect(loadHTML(url, fakeFilePath)).rejects.toThrow('ENOTDIR');
+  });
+
+  test('Fail with access denied directory error', async () => {
+    await expect(loadHTML(url, deniedDir)).rejects.toThrow('EACCES');
   });
 });
