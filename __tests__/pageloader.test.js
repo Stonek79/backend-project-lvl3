@@ -31,7 +31,8 @@ axios.defaults.adapter = httpAdapter;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const getFilePath = (fileName) => path.join(__dirname, '..', '__fixtures__', fileName);
-const getFileData = (fileName) => fs.readFile(getFilePath(fileName), 'utf8');
+// const getFileData = (fileName) => fs.readFile(getFilePath(fileName), 'utf8');
+const getFileData = (fileName) => fs.readFile(`${__dirname}/../__fixtures__/${fileName}`, 'utf8');
 
 const filesInfo = [
   { name: 'originalPage.html', handledName: 'ru-hexlet-io-courses.html', path: '/courses' },
@@ -43,7 +44,7 @@ const host = 'https://ru.hexlet.io';
 const url = 'https://ru.hexlet.io/courses';
 const incorrectUrl = 'https://ru.hexlet.io/incorrect';
 const fakeUrlHost = nock(host).persist();
-const fakeFilePath = getFilePath('fakeFile.js');
+const notDirPath = getFilePath('fakeFile.js');
 let filesContent;
 let tempDir;
 let deniedDir;
@@ -93,12 +94,12 @@ describe('Pageload fails tests', () => {
     await expect(loadHTML(incorrectUrl, tempDir)).rejects.toThrow(`Request failed with status code ${err}`);
   });
 
-  test('Fail with output directory error', async () => {
+  test('Fail with directory NOT exist error', async () => {
     await expect(loadHTML(url, '/fail/dir')).rejects.toThrow('ENOENT');
   });
 
   test('Fail with output is NOT a directory error', async () => {
-    await expect(loadHTML(url, fakeFilePath)).rejects.toThrow('ENOTDIR');
+    await expect(loadHTML(url, notDirPath)).rejects.toThrow('ENOTDIR');
   });
 
   test('Fail with access denied directory error', async () => {
