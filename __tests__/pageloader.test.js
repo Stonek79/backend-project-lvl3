@@ -31,8 +31,7 @@ axios.defaults.adapter = httpAdapter;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const getFilePath = (fileName) => path.join(__dirname, '..', '__fixtures__', fileName);
-// const getFileData = (fileName) => fs.readFile(getFilePath(fileName), 'utf8');
-const getFileData = (fileName) => fs.readFile(`${__dirname}/../__fixtures__/${fileName}`, 'utf8');
+const readFile = (fileName) => fs.readFile(`${__dirname}/../__fixtures__/${fileName}`, 'utf8');
 
 const filesInfo = [
   { name: 'originalPage.html', handledName: 'ru-hexlet-io-courses.html', path: '/courses' },
@@ -43,21 +42,18 @@ const filesInfo = [
 const host = 'https://ru.hexlet.io';
 const url = 'https://ru.hexlet.io/courses';
 const incorrectUrl = 'https://ru.hexlet.io/incorrect';
-const fakeUrlHost = nock(host).persist();
-const notDirPath = getFilePath('fakeFile.js');
+const scope = nock(host).persist();
 let filesContent;
 let tempDir;
-let deniedDir;
 let expectedHtml;
 
 beforeAll(async () => {
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-loader-'));
-  deniedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-loader-'));
-  fs.chmod(deniedDir, 0o400);
-  expectedHtml = await getFileData('loadedPage.html');
+
+  expectedHtml = await readFile('loadedPage.html');
 
   const generatedFilesContent = filesInfo.map(async (file) => {
-    const data = await getFileData(file.name);
+    const data = await readFile(file.name);
     return { [file.name]: data };
   });
 
@@ -65,7 +61,7 @@ beforeAll(async () => {
 
   filesInfo.forEach((file) => {
     const currentFileContent = filesContent.find((content) => content[file.name]);
-    fakeUrlHost.get(file.path).reply(200, currentFileContent[file.name]);
+    scope.get(file.path).reply(200, currentFileContent[file.name]);
   });
 });
 
@@ -94,15 +90,17 @@ describe('Pageload fails tests', () => {
     await expect(loadHTML(incorrectUrl, tempDir)).rejects.toThrow(`Request failed with status code ${err}`);
   });
 
-  test('Fail with directory NOT exist error', async () => {
+  test('Fail with directory NOT exist', async () => {
     await expect(loadHTML(url, '/fail/dir')).rejects.toThrow('ENOENT');
   });
 
-  test('Fail with output is NOT a directory error', async () => {
-    await expect(loadHTML(url, notDirPath)).rejects.toThrow('ENOTDIR');
+  test('Fail with output is NOT a directory', async () => {
+    await expect(loadHTML(url, getFilePath('fakeFile.js'))).rejects.toThrow('ENOTDIR');
   });
 
-  test('Fail with access denied directory error', async () => {
+  test('Fail with access denied directory', async () => {
+    const deniedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-loader-'));
+    fs.chmod(deniedDir, 0o400);
     await expect(loadHTML(url, deniedDir)).rejects.toThrow('EACCES');
   });
 });
