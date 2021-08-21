@@ -1,9 +1,7 @@
 import * as cheerio from 'cheerio';
-import _ from 'lodash';
 import axios from 'axios';
 import debug from 'debug';
 import path from 'path';
-import prettier from 'prettier';
 import { promises as fs } from 'fs';
 import Listr from 'listr';
 import axiosdebug from 'axios-debug-log';
@@ -24,90 +22,75 @@ axiosdebug({
   },
 });
 
-const getPageLinks = ($) => {
-  const pageTags = $('img, script, link');
+const createLoadingResouceTask = (dir, url, handledLink) => axios
+  .get(url, { responseType: 'arraybuffer' })
+  .then(({ data }) => fs.writeFile(path.resolve(dir, handledLink), data));
+
+const handleLoadedLinks = (data, dirName, origin) => {
+  const $ = cheerio.load(data, { decodeEntities: false });
+
   const links = [];
-  logger('Receiving page links');
-  pageTags.each((i, e) => {
+  $('img, script, link').each((i, e) => {
     links.push($(e).attr('src') || $(e).attr('href'));
   });
-  return _.compact(links);
-};
 
-const createLoadingResouceTask = (dirpath, link, handledLink, origin) => {
-  const fullLink = new URL(link, origin).href;
-  logger(`Downloading resource ${fullLink}`);
-  return {
-    title: `Loading resource: ${fullLink.toString()}`,
-    task: () => axios.get(fullLink, { responseType: 'arraybuffer' })
-      .then(({ data }) => fs.writeFile(path.resolve(dirpath, handledLink), data))
-      .catch((err) => { throw err; }),
+  const replaceHtmlAttr = (link, handledLink, attr) => {
+    $(`*[${attr}^="${link}"]`).attr(`${attr}`, (i, a) => a.replace(link, handledLink));
+    return $.html();
   };
-};
 
-const replaceHtmlAttr = (link, handledLink, attr, $) => {
-  $(`*[${attr}^="${link}"]`).attr(`${attr}`, (i, a) => a.replace(link, handledLink));
-  return $.html();
-};
-
-const handleLoadedLinks = ($, dirName, origin) => {
-  const loadedLinks = getPageLinks($);
-  return loadedLinks.reduce((acc, link) => {
-    const absoluteLink = new URL(link, origin);
-    if (absoluteLink.origin === origin) {
+  const handledLinks = links
+    .filter((link) => new URL(link, origin).origin === origin && link)
+    .reduce((acc, link) => {
       const ext = path.extname(link) || '.html';
-      const { dir, name } = path.parse(absoluteLink.href);
-      const extCutLink = path.join(dir, name);
-      const createdFilname = assetsUrlToFilename(extCutLink).concat(ext);
+      const { dir, name } = path.parse(new URL(link, origin).href);
+      const createdFilname = assetsUrlToFilename(path.join(dir, name)).concat(ext);
       const absolutePath = path.join(dirName, createdFilname);
 
-      replaceHtmlAttr(link, absolutePath, 'src', $);
-      replaceHtmlAttr(link, absolutePath, 'href', $);
-      return { ...acc, [link]: absolutePath };
-    }
-    return acc;
-  }, {});
+      replaceHtmlAttr(link, absolutePath, 'src');
+      replaceHtmlAttr(link, absolutePath, 'href');
+
+      return [...acc, [link, absolutePath]];
+    }, []);
+
+  return { html: $.html(), handledLinks };
 };
 
-const loadHTML = (url, dir) => {
+const loadHTML = (url, dir = '') => {
   const dirName = assetsUrlToFilename(url).concat('_files');
   const dirPath = path.resolve(dir, dirName);
   const fileName = assetsUrlToFilename(url).concat('.html');
   const filePath = path.resolve(dir, fileName);
   const { origin } = new URL(url);
 
-  return axios(url)
+  return axios.get(url)
     .then((response) => {
-      logger(`Creating new html page: ${fileName}`);
-      const $ = cheerio.load(response.data);
-      const handledLinks = handleLoadedLinks($, dirName, origin);
-      const changedHtml = prettier.format($.html(), { printWidth: 300, parser: 'html' });
-      const filesTasks = Object.entries(handledLinks)
-        .map(([link, handledLink]) => createLoadingResouceTask(dir, link, handledLink, origin));
+      logger(`Сreating directory: ${dirName.toString()}`);
 
-      const task = new Listr([{
-        title: `Сreating directory: ${dirName.toString()}`,
-        task: () => fs.mkdir(dirPath)
-          .catch((err) => { throw err; }),
-      },
-      {
-        title: 'Loading resources',
-        task: () => new Listr(filesTasks, { concurrent: true }),
-      },
-      ]);
+      return fs.mkdir(dirPath)
+        .then(() => (response));
+    })
+    .then((response) => {
+      const { html, handledLinks } = handleLoadedLinks(response.data, dirName, origin);
+      const filesTasks = handledLinks
+        .map(([link, handledLink]) => {
+          const { href } = new URL(link, origin);
+          logger(`Downloading resource ${href}`);
+          return {
+            title: `Loading resource: ${href}`,
+            task: () => createLoadingResouceTask(dir, href, handledLink),
+          };
+        });
 
-      return task.run(changedHtml)
+      const task = new Listr(filesTasks, { concurrent: true });
+
+      return task.run(html)
         .then((res) => res);
     })
     .then((response) => {
       logger(`Writing loaded html: ${fileName.toString()}`);
-      const task = new Listr([{
-        title: `Сreating htmlFile: ${fileName.toString()}`,
-        task: () => fs.writeFile(filePath, response)
-          .catch((err) => { throw err; }),
-      }]);
 
-      return task.run();
+      return fs.writeFile(filePath, response);
     })
     .then(() => filePath);
 };
