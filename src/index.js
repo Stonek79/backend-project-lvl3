@@ -22,7 +22,7 @@ axiosdebug({
   },
 });
 
-const createLoadingResouceTask = (dir, url, handledLink) => axios
+const prepareTaskResourse = (dir, url, handledLink) => axios
   .get(url, { responseType: 'arraybuffer' })
   .then(({ data }) => fs.writeFile(path.resolve(dir, handledLink), data));
 
@@ -44,8 +44,8 @@ const handleLoadedLinks = (data, dirName, origin) => {
     .reduce((acc, link) => {
       const ext = path.extname(link) || '.html';
       const { dir, name } = path.parse(new URL(link, origin).href);
-      const createdFilname = assetsUrlToFilename(path.join(dir, name)).concat(ext);
-      const absolutePath = path.join(dirName, createdFilname);
+      const handledFilename = assetsUrlToFilename(path.join(dir, name)).concat(ext);
+      const absolutePath = path.join(dirName, handledFilename);
 
       replaceHtmlAttr(link, absolutePath, 'src');
       replaceHtmlAttr(link, absolutePath, 'href');
@@ -68,17 +68,17 @@ const loadHTML = (url, dir = '') => {
       logger(`Сreating directory: ${dirName.toString()}`);
 
       return fs.mkdir(dirPath)
-        .then(() => (response));
+        .then(() => (response.data));
     })
     .then((response) => {
-      const { html, handledLinks } = handleLoadedLinks(response.data, dirName, origin);
+      const { html, handledLinks } = handleLoadedLinks(response, dirName, origin);
       const filesTasks = handledLinks
         .map(([link, handledLink]) => {
           const { href } = new URL(link, origin);
           logger(`Downloading resource ${href}`);
           return {
             title: `Loading resource: ${href}`,
-            task: () => createLoadingResouceTask(dir, href, handledLink),
+            task: () => prepareTaskResourse(dir, href, handledLink),
           };
         });
 
