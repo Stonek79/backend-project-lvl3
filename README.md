@@ -1,7 +1,6 @@
 ### Hexlet tests and linter status:
 [![Actions Status](https://github.com/Stonek79/backend-project-lvl3/workflows/hexlet-check/badge.svg)](https://github.com/Stonek79/backend-project-lvl3/actions)
 
-***
 [![Maintainability](https://api.codeclimate.com/v1/badges/a99a88d28ad37a79dbf6/maintainability)](https://codeclimate.com/github/Stonek79/backend-project-lvl3)
 [![Test Coverage](https://api.codeclimate.com/v1/badges/a99a88d28ad37a79dbf6/test_coverage)](https://codeclimate.com/github/Stonek79/backend-project-lvl3)
 [![WF](https://github.com/Stonek79/backend-project-lvl3/workflows/PageLoader/badge.svg)](https://github.com/Stonek79/backend-project-lvl3)
@@ -9,7 +8,7 @@
 
 # Page Loader 
 
-### **Page Loader** - a simple command-line utility for downloading and saving web page on your PC.
+### **Page Loader** the simple command-line utility for downloading and saving web page on your PC.
 
 **Page Loader** is the third project of the profession [*back-end programmer*](https://ru.hexlet.io/programs/backend) on educational project [**Hexlet**](https://ru.hexlet.io/).
 
@@ -19,11 +18,11 @@ You must have [**node.js**](https://nodejs.org/en/) installed on your machine (v
 
 Open your console and enter the commands:
 
- $ user@name: git clone https://github.com/Stonek79/backend-project-lvl3.git
+    $ user@name: git clone https://github.com/Stonek79/backend-project-lvl3.git
 
 Then find and go to the folder ../backend-project-lvl3/ on your machine and launch installation:
 
- $ user@name: make install
+    make install
 
 
 * * *
@@ -43,7 +42,7 @@ example:
 or
 
     page-loader https://exemple.com
-    (page will be loaded to ../backend-project-lvl3/)
+    (page will be loaded to ../backend-project-lvl3/ - yours page-loader programm directory)
 
 
 By default (if you don't enter dir name to command line) the page will be loded into the **Page Loader** directory
