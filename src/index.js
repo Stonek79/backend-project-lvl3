@@ -24,22 +24,15 @@ axiosdebug({
 
 const prepareTaskResourse = (dir, url, handledLink) => axios
   .get(url, { responseType: 'arraybuffer' })
-  .then(({ data }) => fs.writeFile(path.resolve(dir, handledLink), data));
+  .then(({ data }) => fs.writeFile(path.resolve(dir, handledLink), data))
+  .catch((error) => Error('Axios Error: ', error.toJSON()));
 
 const handleLoadedLinks = (data, dirName, origin) => {
   const $ = cheerio.load(data, { decodeEntities: false });
 
-  const links = [];
-  $('img, script, link').each((i, e) => {
-    links.push($(e).attr('src') || $(e).attr('href'));
-  });
-
-  const replaceHtmlAttr = (link, handledLink, attr) => {
-    $(`*[${attr}^="${link}"]`).attr(`${attr}`, (i, a) => a.replace(link, handledLink));
-    return $.html();
-  };
-
-  const handledLinks = links
+  const handledLinks = $('img[src], script[src], link[href]')
+    .map((i, e) => $(e).attr('src') || $(e).attr('href'))
+    .toArray()
     .filter((link) => new URL(link, origin).origin === origin && link)
     .reduce((acc, link) => {
       const ext = path.extname(link) || '.html';
@@ -47,8 +40,8 @@ const handleLoadedLinks = (data, dirName, origin) => {
       const handledFilename = assetsUrlToFilename(path.join(dir, name)).concat(ext);
       const absolutePath = path.join(dirName, handledFilename);
 
-      replaceHtmlAttr(link, absolutePath, 'src');
-      replaceHtmlAttr(link, absolutePath, 'href');
+      $(`[src="${link}"]`).attr('src', `${absolutePath}`);
+      $(`[href="${link}"]`).attr('href', `${absolutePath}`);
 
       return [...acc, [link, absolutePath]];
     }, []);
@@ -84,8 +77,7 @@ const loadHTML = (url, dir = '') => {
 
       const task = new Listr(filesTasks, { concurrent: true });
 
-      return task.run(html)
-        .then((res) => res);
+      return task.run(html);
     })
     .then((response) => {
       logger(`Writing loaded html: ${fileName.toString()}`);
