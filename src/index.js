@@ -24,8 +24,7 @@ axiosdebug({
 
 const prepareTaskResourse = (dir, url, handledLink) => axios
   .get(url, { responseType: 'arraybuffer' })
-  .then(({ data }) => fs.writeFile(path.resolve(dir, handledLink), data))
-  .catch((error) => Error('Axios Error: ', error.toJSON()));
+  .then(({ data }) => fs.writeFile(path.resolve(dir, handledLink), data));
 
 const handleLoadedLinks = (data, dirName, origin) => {
   const $ = cheerio.load(data, { decodeEntities: false });
@@ -71,11 +70,12 @@ const loadHTML = (url, dir = '') => {
           logger(`Downloading resource ${href}`);
           return {
             title: `Loading resource: ${href}`,
-            task: () => prepareTaskResourse(dir, href, handledLink),
+            task: (ctx, task) => prepareTaskResourse(dir, href, handledLink)
+              .catch((err) => task.skip(`Task error: ${err.message}`)),
           };
         });
 
-      const task = new Listr(filesTasks, { concurrent: true });
+      const task = new Listr(filesTasks, { concurrent: true, exitOnError: false });
 
       return task.run(html);
     })
