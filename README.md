@@ -31,7 +31,7 @@ Then find and go to the folder ../backend-project-lvl3/ on your machine and laun
 
 The command use this syntax:
 
-    page-loder [dir] url
+    page-loader [dir] url
     page-loader  <download directory> <web page address>
 
 example:
